@@ -1,0 +1,2 @@
+[pptp]
+test10 ansible_host=94.130.27.53 ansible_connection=ssh ansible_user=root ansible_ssh_private_key_file=/home/dima/work/uni/assets/bclient-ssh-key

@@ -1,0 +1,98 @@
+---
+  - name: add ansible user
+    hosts: pptp
+    become: true
+    become_method: sudo
+    become_user: root
+    vars_files:
+      - bclient-vars.yml
+
+    tasks:
+      - name: install "pptpd" package
+        apt:
+          name: pptpd
+
+      - name: copy pptpd.conf
+        template:
+          src: templates/pptpd.j2
+          dest: "/etc/pptpd.conf"
+          mode: 0640
+
+      - name: copy pptpd-options
+        template:
+          src: templates/chap-secrets.j2
+          dest: "/etc/ppp/chap-secrets"
+          mode: 0600
+
+      - name: copy pptpd-options
+        template:
+          src: templates/pptpd-options.j2
+          dest: "/etc/ppp/pptpd-options"
+          mode: 0640
+
+      - name: disable pptpd service (workaround to be able to enable it later)
+        service:
+          name: pptpd
+          enabled: no
+
+      - name: restart service pptpd and enable it
+        service:
+          name: pptpd
+          state: restarted
+          enabled: yes
+          daemon_reload: yes
+
+      - name: Set ip forwarding
+        sysctl:
+          name: net.ipv4.ip_forward
+          value: '1'
+          sysctl_set: yes
+          state: present
+          reload: yes
+
+      - ufw:
+          rule: allow
+          name: OpenSSH
+
+      # ufw supports connection rate limiting, which is useful for protecting
+      # against brute-force login attacks. ufw will deny connections if an IP
+      # address has attempted to initiate 6 or more connections in the last
+      # 30 seconds. See  http://www.debian-administration.org/articles/187
+      # for details. Typical usage is:
+      - ufw:
+          rule: limit
+          port: ssh
+          proto: tcp
+
+      - name: Allow all access to tcp port 1723 (pptp)
+        ufw:
+          rule: allow
+          port: '1723'
+          proto: tcp
+
+      - name: Allow forwarded traffic
+        ufw:
+          direction: routed
+          default: allow
+          route: yes
+
+      - name: allow gre by inserting additional rule to ufw (w/o this pptp not working with ufw)
+        lineinfile:
+          path: /etc/ufw/before.rules
+          insertbefore: '# drop INVALID packets.*'
+          line: '-A ufw-before-input -p 47 -j ACCEPT'
+
+      - name: insert additional rules to ufw for NAT
+        blockinfile:
+          path: /etc/ufw/before.rules
+          block: |
+            # added by ansible script
+            *nat
+            :POSTROUTING ACCEPT [0:0]
+            # setup routing
+            -A POSTROUTING -o eth0 -j MASQUERADE
+            COMMIT
+
+      - name: enable UFW service
+        ufw:
+          state: enabled

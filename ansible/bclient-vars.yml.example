@@ -1,0 +1,5 @@
+server_name: test10
+local_ip: 192.168.0.1
+remote_ip: 192.168.0.160-160
+pptp_user: user10
+pptp_pass: pass10
